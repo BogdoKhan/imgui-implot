@@ -23,6 +23,8 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include "implot.h"
+
+#include <fstream>
 //#include <vulkan/vulkan_beta.h>
 
 //#define APP_USE_UNLIMITED_FRAME_RATE
@@ -44,6 +46,11 @@ static VkDescriptorPool         g_DescriptorPool = VK_NULL_HANDLE;
 static ImGui_ImplVulkanH_Window g_MainWindowData;
 static uint32_t                 g_MinImageCount = 2;
 static bool                     g_SwapChainRebuild = false;
+
+struct Vector2f{
+	double x;
+	double y;
+};
 
 static void check_vk_result(VkResult err)
 {
@@ -418,6 +425,7 @@ int main(int, char**)
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+	ImPlot::CreateContext();
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
@@ -465,8 +473,12 @@ int main(int, char**)
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     
-	std::vector<int> bar_data;
-	for (int i = 0; i < 12; i++) {bar_data.push_back(i*4);}
+	std::vector<Vector2f> bar_data;
+	for (int i = 0; i < 1200; i++) {
+		Vector2f buf;
+		buf.x = i;
+		buf.y = 0.25*i*i;
+		bar_data.push_back(buf);}
 
     // Main loop
     bool done = false;
@@ -543,12 +555,12 @@ int main(int, char**)
 
             
             //ImGui::CreateContext();
-			ImPlot::CreateContext();
 			if (ImPlot::BeginPlot("My Plot")) {
-				ImPlot::PlotBars("My Bar Plot", bar_data.data(), 11);
+				ImPlot::PlotStairs("Step plot", &(bar_data.data()[0].x), &(bar_data.data()[0].y), bar_data.size(),0,0, sizeof(Vector2f));
+				//ImPlot::PlotBars("My Bar Plot", bar_data.data(), 11);
 				ImPlot::EndPlot();
 			}
-			ImPlot::DestroyContext();
+
 			
             ImGui::End();
         }
@@ -573,6 +585,7 @@ int main(int, char**)
     check_vk_result(err);
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplSDL2_Shutdown();
+	ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
     CleanupVulkanWindow();
