@@ -1,3 +1,0 @@
-/home/dkc1/Desktop/work/etc/imgui/test1/build/CMakeFiles/example_sdl2_vulkan.dir
-/home/dkc1/Desktop/work/etc/imgui/test1/build/CMakeFiles/edit_cache.dir
-/home/dkc1/Desktop/work/etc/imgui/test1/build/CMakeFiles/rebuild_cache.dir
