@@ -16,15 +16,20 @@
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_vulkan.h"
+#include "imgui_stdlib.h"
 #include <stdio.h>          // printf, fprintf
 #include <stdlib.h>         // abort
 #include <SDL.h>
 #include <SDL_vulkan.h>
 #include <vulkan/vulkan.h>
 #include <vector>
+#include <cstring>
+#include <algorithm>
 #include "implot.h"
 
+#include <iostream>
 #include <fstream>
+#include <sstream>
 //#include <vulkan/vulkan_beta.h>
 
 //#define APP_USE_UNLIMITED_FRAME_RATE
@@ -376,6 +381,44 @@ static void FramePresent(ImGui_ImplVulkanH_Window* wd)
     wd->SemaphoreIndex = (wd->SemaphoreIndex + 1) % wd->SemaphoreCount; // Now we can use the next set of semaphores
 }
 
+char *convert(const std::string & s)
+{
+   char *pc = new char[s.size()+1];
+   std::strcpy(pc, s.c_str());
+   return pc; 
+}
+
+void load_data(std::ifstream& ifs, const char* fname, std::vector<Vector2f>& cont){
+	cont.clear();
+    const char* path = "./data/";
+    char* ff;
+    asprintf(&ff, "%s%s", path, fname);
+    std::cout << ff << "\n";
+	ifs.open(ff, std::ios::in);
+	std::string dump_str;
+    while (std::getline(ifs, dump_str)) {
+		Vector2f buf;
+		std::stringstream ss(dump_str);
+		//std::cout << dump_str << "\n";
+		std::string xval, yval;
+		std::getline(ss, xval, ',');
+		std::getline(ss, yval, ',');
+		buf.x = std::stod(xval);
+		buf.y = std::stod(yval);
+		cont.push_back(buf);
+	}
+	ifs.close();
+}
+
+bool fnamesComapre(const std::string& lhs, const std::string& rhs){
+    std::string data_ = "data_";    //file name template: "data_15.csv"
+    std::string lhs_buf = lhs.substr(lhs.find(data_) + data_.size());   //get string containing only number
+    lhs_buf.erase(lhs_buf.begin() + lhs_buf.find("."), lhs_buf.end()-1);
+    std::string rhs_buf = rhs.substr(rhs.find(data_) + data_.size());
+    rhs_buf.erase(rhs_buf.begin() + rhs_buf.find("."), rhs_buf.end()-1);
+    return stoi(lhs_buf) < stoi(rhs_buf);
+}
+
 // Main code
 int main(int, char**)
 {
@@ -473,12 +516,26 @@ int main(int, char**)
     bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     
+
+    std::ifstream ifs;
 	std::vector<Vector2f> bar_data;
-	for (int i = 0; i < 1200; i++) {
-		Vector2f buf;
-		buf.x = i;
-		buf.y = 0.25*i*i;
-		bar_data.push_back(buf);}
+
+    //create list of files in data directory
+    std::ifstream ifs_filesList;
+    ifs_filesList.open("csv_list.txt", std::ios::in);
+    std::vector<std::string> items1;
+    std::string fnames;
+    while(std::getline(ifs_filesList, fnames)){
+        if (fnames.find(".csv") != std::string::npos){
+            items1.push_back(fnames);           //write only .csv files
+        }
+    }
+    std::sort(items1.begin(), items1.end(), fnamesComapre); //sort in ascending order
+    
+	bool data_valid = 0;        //was name of datafile selected?
+	bool is_selected = 0;       //was item selected in combo box?
+	bool is_loaded = 0;         //was "load" button printed?
+	bool printed = 0;           //was "print" button pushed?
 
     // Main loop
     bool done = false;
@@ -531,7 +588,12 @@ int main(int, char**)
 
             ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
             ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-            ImGui::Checkbox("Another Window", &show_another_window);
+            ImGui::Checkbox("Spectrum window", &show_another_window);
+            
+
+            //ImGui::SameLine(); //HelpMarker(
+            //    "Using the simplified one-liner Combo API here.\n"
+            //    "Refer to the \"Combo\" section below for an explanation of how to use the more flexible and general BeginCombo/EndCombo API.");
 
             ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
             ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
@@ -548,19 +610,53 @@ int main(int, char**)
         // 3. Show another simple window.
         if (show_another_window)
         {
-            ImGui::Begin("Another Window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-            ImGui::Text("Hello from another window!");
-            if (ImGui::Button("Close Me"))
-                show_another_window = false;
+            ImGui::Begin("Spectrum window", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
+            	
+			
+			std::vector<char*> vc;
+			std::transform(items1.begin(), items1.end(), std::back_inserter(vc), convert); 
+            static const char* curr_item = "Select data source:";
 
-            
-            //ImGui::CreateContext();
-			if (ImPlot::BeginPlot("My Plot")) {
-				ImPlot::PlotStairs("Step plot", &(bar_data.data()[0].x), &(bar_data.data()[0].y), bar_data.size(),0,0, sizeof(Vector2f));
-				//ImPlot::PlotBars("My Bar Plot", bar_data.data(), 11);
-				ImPlot::EndPlot();
+			if(ImGui::BeginCombo("Current file", curr_item)){
+				for (int n = 0; n < items1.size(); n++) {
+					is_selected = (curr_item == items1.at(n).c_str());
+					if (ImGui::Selectable(items1.at(n).c_str(), is_selected)) {
+						curr_item = items1.at(n).c_str();
+					}
+					if (is_selected) {
+						ImGui::SetItemDefaultFocus();
+						data_valid = 1;
+					}
+				}
+				ImGui::EndCombo();
 			}
 
+			if (ImGui::Button("Load")){
+				std::cout << curr_item << "\n";
+				load_data(ifs, curr_item, bar_data);
+				data_valid = 0;
+                std::cout << "Data loaded\n";
+				is_loaded = 1;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Print")){
+				printed = 1;
+			}
+			
+			if (printed) {
+				//std::cout << bar_data.size() << "\n";
+				if (ImPlot::BeginPlot("My Plot")) {
+					ImPlot::PlotStairs("Step plot", &(bar_data.data()[0].x), &(bar_data.data()[0].y), bar_data.size(),0,0, sizeof(Vector2f));
+				//	//ImPlot::PlotBars("My Bar Plot", bar_data.data(), 11);
+					ImPlot::EndPlot();
+				}
+			}
+
+            std::string data_src = "Data source: ";
+            data_src.append(curr_item, strlen(curr_item));
+
+            ImGui::Text("%s", data_src.c_str());
+			if (ImGui::Button("Close")) show_another_window = false;
 			
             ImGui::End();
         }

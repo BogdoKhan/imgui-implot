@@ -19,7 +19,7 @@ find_package(SDL2 REQUIRED)
 
 # Dear ImGui
 set(IMGUI_DIR ../)
-include_directories(${IMGUI_DIR} ${IMGUI_DIR}/implot ${IMGUI_DIR}/backends ..)
+include_directories(${IMGUI_DIR} ${IMGUI_DIR}/implot ${IMGUI_DIR}/backends ${IMGUI_DIR}/misc/cpp ..)
 
 # Libraries
 find_package(Vulkan REQUIRED)
