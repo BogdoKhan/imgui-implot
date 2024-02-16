@@ -32,6 +32,12 @@
 #include <sstream>
 //#include <vulkan/vulkan_beta.h>
 
+#include <gsl/gsl_vector.h>
+#include <gsl/gsl_multifit_nlinear.h>
+#include <gsl/gsl_sf_bessel.h>
+#include <gsl/gsl_randist.h>
+#include "curve_fit.hpp"
+
 //#define APP_USE_UNLIMITED_FRAME_RATE
 #ifdef _DEBUG
 #define APP_USE_VULKAN_DEBUG_REPORT
@@ -410,6 +416,33 @@ void load_data(std::ifstream& ifs, const char* fname, std::vector<Vector2f>& con
 	ifs.close();
 }
 
+void load_data(std::ifstream& ifs, const char* fname, std::vector<Vector2f>& cont,
+                std::vector<double>& xvals, std::vector<double>& yvals){
+	cont.clear();
+    xvals.clear();
+    yvals.clear();
+    const char* path = "./data/";
+    char* ff;
+    asprintf(&ff, "%s%s", path, fname);
+    std::cout << ff << "\n";
+	ifs.open(ff, std::ios::in);
+	std::string dump_str;
+    while (std::getline(ifs, dump_str)) {
+		Vector2f buf;
+		std::stringstream ss(dump_str);
+		//std::cout << dump_str << "\n";
+		std::string xval, yval;
+		std::getline(ss, xval, ',');
+		std::getline(ss, yval, ',');
+		buf.x = std::stod(xval);
+        xvals.push_back(buf.x);
+		buf.y = std::stod(yval);
+        yvals.push_back(buf.y);
+		cont.push_back(buf);
+	}
+	ifs.close();
+}
+
 bool fnamesComapre(const std::string& lhs, const std::string& rhs){
     std::string data_ = "data_";    //file name template: "data_15.csv"
     std::string lhs_buf = lhs.substr(lhs.find(data_) + data_.size());   //get string containing only number
@@ -417,6 +450,22 @@ bool fnamesComapre(const std::string& lhs, const std::string& rhs){
     std::string rhs_buf = rhs.substr(rhs.find(data_) + data_.size());
     rhs_buf.erase(rhs_buf.begin() + rhs_buf.find("."), rhs_buf.end()-1);
     return stoi(lhs_buf) < stoi(rhs_buf);
+}
+
+double gaussian(double x, double a, double b, double c)
+{
+    const double z = (x - b) / c;
+    return a * std::exp(-0.5 * z * z);
+}
+
+double Landau(double x, double c, double mu, double sigma)
+{
+   if (sigma <= 0) return 0;
+   double den = c * gsl_ran_landau_pdf( (x-mu)/sigma );
+   //std::cout << "den " << den << "\n";
+   //if (!norm) return den;
+   return den;
+   //return den/sigma;
 }
 
 // Main code
@@ -518,7 +567,7 @@ int main(int, char**)
     
 
     std::ifstream ifs;
-	std::vector<Vector2f> bar_data;
+	std::vector<Vector2f> bar_data, acq_fv;
 
     //create list of files in data directory
     std::ifstream ifs_filesList;
@@ -536,6 +585,13 @@ int main(int, char**)
 	bool is_selected = 0;       //was item selected in combo box?
 	bool is_loaded = 0;         //was "load" button printed?
 	bool printed = 0;           //was "print" button pushed?
+    bool fitted = 0;
+
+    double x = 5.0;
+    double y = gsl_sf_bessel_J0 (x);
+    printf ("J0(%g) = %.18e\n", x, y);
+
+    std::vector<double> xvals, yvals;
 
     // Main loop
     bool done = false;
@@ -633,7 +689,7 @@ int main(int, char**)
 
 			if (ImGui::Button("Load")){
 				std::cout << curr_item << "\n";
-				load_data(ifs, curr_item, bar_data);
+				load_data(ifs, curr_item, bar_data, xvals, yvals);
 				data_valid = 0;
                 std::cout << "Data loaded\n";
 				is_loaded = 1;
@@ -642,15 +698,40 @@ int main(int, char**)
 			if (ImGui::Button("Print")){
 				printed = 1;
 			}
+
+            ImGui::SameLine();
+			if (ImGui::Button("Fit")){
+				fitted = 1;
+			}
 			
 			if (printed) {
 				//std::cout << bar_data.size() << "\n";
 				if (ImPlot::BeginPlot("My Plot")) {
 					ImPlot::PlotStairs("Step plot", &(bar_data.data()[0].x), &(bar_data.data()[0].y), bar_data.size(),0,0, sizeof(Vector2f));
+                    ImPlot::PlotLine("Fit data", &(acq_fv.data()[0].x), &(acq_fv.data()[0].y), acq_fv.size(),0,0, sizeof(Vector2f));
 				//	//ImPlot::PlotBars("My Bar Plot", bar_data.data(), 11);
 					ImPlot::EndPlot();
 				}
 			}
+
+            if (fitted) {
+                acq_fv.clear();
+                for (size_t i = 0; i < xvals.size(); i++) {
+                   // std::cout << xvals[i] << " " << yvals[i] << "\n";
+                }
+                //auto r = curve_fit(gaussian, {8e-2, 1.0e-7, 5.0e-7}, xvals, yvals);
+                auto r = curve_fit(Landau, {0.4, -1.0e-9, 9e-8}, xvals, yvals);
+                std::cout << "result: " << r[0] << ' ' << r[1] << ' ' << r[2] << '\n';
+                for (size_t i = 0; i < xvals.size(); i++) {
+                    
+                    Vector2f fitvals;
+                    fitvals.x = xvals[i];
+                    //fitvals.y = gaussian(xvals[i], r[0], r[1], r[2]);
+                    fitvals.y = Landau(xvals[i], r[0], r[1], r[2]);
+                    acq_fv.push_back(fitvals);
+                }
+                fitted = 0;
+            }
 
             std::string data_src = "Data source: ";
             data_src.append(curr_item, strlen(curr_item));
