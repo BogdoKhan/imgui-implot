@@ -25,7 +25,7 @@ include_directories(${IMGUI_DIR} ${IMGUI_DIR}/implot ${IMGUI_DIR}/backends ${IMG
 
 find_package(GSL REQUIRED)
 
-set(GSL_FIT_DIR ../include/external/gsl-curve-fit/)
+set(GSL_FIT_DIR ./include/external/gsl-curve-fit/)
 include_directories(${GSL_FIT_DIR})
 
 # Libraries
