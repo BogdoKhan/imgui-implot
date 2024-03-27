@@ -26,6 +26,8 @@
 #include <cstring>
 #include <algorithm>
 #include "implot.h"
+#include <map>
+#include <random>
 
 #include <iostream>
 #include <fstream>
@@ -586,12 +588,46 @@ int main(int, char**)
 	bool is_loaded = 0;         //was "load" button printed?
 	bool printed = 0;           //was "print" button pushed?
     bool fitted = 0;
+    bool bCumul = 0;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::exponential_distribution<> d(25);
 
     double x = 5.0;
     double y = gsl_sf_bessel_J0 (x);
     printf ("J0(%g) = %.18e\n", x, y);
 
     std::vector<double> xvals, yvals;
+    std::vector<double> cmi, cmx, cmy;
+    std::map<size_t, std::vector<double>> cmvects;
+    for (double cmiter = -4; cmiter < 20; cmiter += 0.01) {
+        cmx.push_back(cmiter);
+    }
+    cmy.resize(cmx.size());
+
+    for (double cmiter = -2; cmiter < 2; cmiter += 0.01){
+        double val = 100*d(gen);
+        std::cout << val << "\n";
+        cmi.push_back(val);
+    }
+
+    size_t key = 0;
+    for (size_t ii = 0; ii < cmi.size(); ii++) {
+        double cmiter = cmi.at(ii);
+        //cmi.push_back(cmiter);
+        cmvects[key].resize(cmx.size());
+        for(size_t iter = 0; iter < cmvects.at(key).size(); iter++){
+            double val = Landau(cmx.at(iter), 1, cmiter, 0.3 );
+            cmvects.at(key).at(iter) = val;
+            cmy.at(iter) += val;
+        }
+        key++;
+    }
+    //for(size_t iter = 0; iter < cmy.size(); iter++){
+    //    cmy.at(iter) /= key;
+    //}
+
 
     // Main loop
     bool done = false;
@@ -703,6 +739,11 @@ int main(int, char**)
 			if (ImGui::Button("Fit")){
 				fitted = 1;
 			}
+
+            ImGui::SameLine();
+			if (ImGui::Button("Cumulative")){
+				bCumul = 1;
+			}
 			
 			if (printed) {
 				//std::cout << bar_data.size() << "\n";
@@ -738,6 +779,22 @@ int main(int, char**)
 
             ImGui::Text("%s", data_src.c_str());
 			if (ImGui::Button("Close")) show_another_window = false;
+
+            if (bCumul) {
+                if (ImPlot::BeginPlot("Cumul")) {
+					//ImPlot::PlotStairs("Step plot", &(bar_data.data()[0].x), &(bar_data.data()[0].y), bar_data.size(),0,0, sizeof(Vector2f));
+                    for (const auto& item : cmvects) {
+                        std::vector<double> yv1 = item.second;
+                        std::vector<double> xv1 = cmx;
+                        ImPlot::PlotLine("Fit data", &xv1[0], &yv1[0], yv1.size(),0,0, sizeof(double));
+                        ImPlot::PlotLine("Cumul data", &xv1[0], &cmy[0], yv1.size(),0,0, sizeof(double));
+
+                    }
+				//	//ImPlot::PlotBars("My Bar Plot", bar_data.data(), 11);
+					ImPlot::EndPlot();
+				}
+                //bCumul = 0;
+            }
 			
             ImGui::End();
         }
